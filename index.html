@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mobile Booth Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', 'Segoe UI', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+            overflow-x: hidden;
+            position: relative;
+            line-height: 1.6;
+        }
+
+        /* Enhanced glowing background */
+        .background-glow {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .glow-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(60px);
+            opacity: 0.6;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        .glow-orb:nth-child(1) {
+            width: 300px;
+            height: 300px;
+            background: #4285f4;
+            top: 10%;
+            left: 10%;
+            animation-delay: 0s;
+        }
+
+        .glow-orb:nth-child(2) {
+            width: 250px;
+            height: 250px;
+            background: #ea4335;
+            top: 60%;
+            right: 15%;
+            animation-delay: 2s;
+        }
+
+        .glow-orb:nth-child(3) {
+            width: 200px;
+            height: 200px;
+            background: #fbbc05;
+            bottom: 20%;
+            left: 20%;
+            animation-delay: 4s;
+        }
+
+        .glow-orb:nth-child(4) {
+            width: 280px;
+            height: 280px;
+            background: #34a853;
+            top: 30%;
+            right: 25%;
+            animation-delay: 1s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-20px) scale(1.05); }
+        }
+
+        .dashboard-container {
+            width: 100%;
+            min-height: 100vh;
+            padding: 30px;
+            position: relative;
+        }
+
+        /* Enhanced Header with Google Colors */
+        .main-header {
+            text-align: center;
+            margin-bottom: 50px;
+            width: 100%;
+        }
+
+        .main-header h1 {
+            font-size: clamp(2.3rem, 6vw, 3.8rem);
+            font-weight: 800;
+            margin-bottom: 15px;
+            background: linear-gradient(135deg, #4285f4, #ea4335, #fbbc05, #34a853);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 4px 20px rgba(66, 133, 244, 0.3);
+            letter-spacing: -0.5px;
+            line-height: 1.1;
+        }
+
+        .main-header p {
+            font-size: clamp(1.1rem, 3vw, 1.4rem);
+            color: #a0a0c0;
+            font-weight: 400;
+            max-width: 600px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        /* Enhanced Glass Cards with Glowing Borders */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border-radius: 20px;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(66, 133, 244, 0.1) 0%, 
+                rgba(234, 67, 53, 0.1) 25%, 
+                rgba(251, 188, 5, 0.1) 50%, 
+                rgba(52, 168, 83, 0.1) 75%);
+            border-radius: 20px;
+            padding: 2px;
+            mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            mask-composite: exclude;
+            -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .glass-card:hover::before {
+            opacity: 1;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-8px) scale(1.02);
+            box-shadow: 
+                0 20px 40px rgba(0, 0, 0, 0.3),
+                0 0 80px rgba(66, 133, 244, 0.2),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+
+        /* Header Controls with Google Colors */
+        .header-controls {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 18px;
+            color: #e0e0e0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .control-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            transition: left 0.5s ease;
+        }
+
+        .control-btn:hover::before {
+            left: 100%;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+            border-color: rgba(66, 133, 244, 0.5);
+        }
+
+        .user-info {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 12px 18px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .user-role {
+            background: linear-gradient(135deg, #4285f4, #34a853);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* Enhanced Typography for Readability */
+        .glass-card h2 {
+            color: #ffffff;
+            font-size: clamp(1.2rem, 3vw, 1.5rem);
+            font-weight: 700;
+            margin-bottom: 20px;
+            text-align: center;
+            letter-spacing: -0.3px;
+            line-height: 1.3;
+        }
+
+        .glass-card h3 {
+            color: #b0b0d0;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            line-height: 1.4;
+        }
+
+        .glass-card p {
+            color: #ffffff;
+            font-size: clamp(1.4rem, 4vw, 2.2rem);
+            font-weight: 800;
+            line-height: 1.2;
+        }
+
+        .glass-card label {
+            color: #c0c0e0;
+            font-size: clamp(0.9rem, 2vw, 1rem);
+            font-weight: 600;
+            margin-bottom: 8px;
+            display: block;
+            letter-spacing: 0.3px;
+        }
+
+        /* Enhanced Form Elements */
+        .filter-select {
+            width: 100%;
+            padding: 14px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 12px;
+            color: #ffffff;
+            font-size: 1rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+            font-family: inherit;
+        }
+
+        .filter-select:focus {
+            outline: none;
+            border-color: #4285f4;
+            box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.2);
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Enhanced Buttons */
+        .btn {
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            font-family: inherit;
+            letter-spacing: 0.3px;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #34a853, #2e8b47);
+            color: white;
+            border: 1px solid rgba(52, 168, 83, 0.3);
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Main Grid Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 30px;
+            margin-bottom: 40px;
+            width: 100%;
+            max-width: 100%;
+        }
+
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+        }
+
+        /* Enhanced Summary Cards */
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+        }
+
+        .summary-card {
+            padding: 30px 20px;
+            text-align: center;
+            position: relative;
+        }
+
+        .summary-card::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60px;
+            height: 3px;
+            background: linear-gradient(90deg, #4285f4, #ea4335, #fbbc05, #34a853);
+            border-radius: 2px;
+        }
+
+        /* Charts Grid */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 25px;
+        }
+
+        .chart-container {
+            padding: 25px;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            height: 320px;
+        }
+
+        /* Service Items */
+        .service-item {
+            background: rgba(255, 255, 255, 0.05);
+            padding: 18px;
+            border-radius: 14px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s ease;
+        }
+
+        .service-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateX(5px);
+            border-color: rgba(66, 133, 244, 0.3);
+        }
+
+        .service-name {
+            color: #ffffff;
+            font-weight: 600;
+            margin-bottom: 6px;
+            font-size: 1rem;
+        }
+
+        .service-limit {
+            color: #a0a0c0;
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #4285f4, #34a853);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-fill.high {
+            background: linear-gradient(90deg, #ea4335, #fbbc05);
+        }
+
+        /* ========== RESPONSIVE DESIGN ========== */
+        @media (max-width: 1200px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+                gap: 25px;
+            }
+            
+            .summary-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .dashboard-container {
+                padding: 20px;
+            }
+            
+            .header-controls {
+                position: static;
+                justify-content: center;
+                margin-bottom: 20px;
+                flex-wrap: wrap;
+            }
+            
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .chart-wrapper {
+                height: 280px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .dashboard-container {
+                padding: 15px;
+            }
+            
+            .glass-card {
+                border-radius: 16px;
+            }
+            
+            .chart-wrapper {
+                height: 240px;
+            }
+            
+            .main-header h1 {
+                font-size: 2rem;
+            }
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #4285f4, #34a853);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #ea4335, #fbbc05);
+        }
+    </style>
+</head>
+<body>
+    <!-- Enhanced Glowing Background -->
+    <div class="background-glow">
+        <div class="glow-orb"></div>
+        <div class="glow-orb"></div>
+        <div class="glow-orb"></div>
+        <div class="glow-orb"></div>
+    </div>
+    
+    <!-- Header Controls -->
+    <div class="header-controls">
+        <button class="control-btn" id="themeToggle">
+            <i class="fas fa-palette"></i> Theme
+        </button>
+        <button class="control-btn" id="exportBtn">
+            <i class="fas fa-download"></i> Export
+        </button>
+        <div class="user-info" id="userInfo" style="display: none;">
+            <i class="fas fa-user"></i>
+            <span id="username">Guest</span>
+            <span class="user-role" id="userRole">Viewer</span>
+            <button class="control-btn" id="logoutBtn" style="padding: 8px 12px;">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+        <button class="control-btn" id="loginBtn">
+            <i class="fas fa-sign-in-alt"></i> Login
+        </button>
+    </div>
+
+    <div class="dashboard-container">
+        <!-- Enhanced Header -->
+        <div class="main-header">
+            <h1><i class="fas fa-chart-network"></i> Mobile Booth Analytics</h1>
+            <p>Advanced insights and real-time performance monitoring with Google-inspired design</p>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Filters -->
+                <div class="glass-card filters-section">
+                    <div style="padding: 25px;">
+                        <h2><i class="fas fa-sliders-h"></i> Data Filters</h2>
+                        <div class="filter-group">
+                            <label for="boothFilter"><i class="fas fa-mobile-alt"></i> Filter by Booth</label>
+                            <select id="boothFilter" class="filter-select">
+                                <option value="all">All Booths</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="serviceFilter"><i class="fas fa-cog"></i> Filter by Service</label>
+                            <select id="serviceFilter" class="filter-select">
+                                <option value="all">All Services</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="dateRange"><i class="fas fa-calendar"></i> Date Range</label>
+                            <select id="dateRange" class="filter-select">
+                                <option value="all">All Time</option>
+                                <option value="today">Today</option>
+                                <option value="week">This Week</option>
+                                <option value="month">This Month</option>
+                            </select>
+                        </div>
+                        <div class="action-buttons" style="display: flex; gap: 12px; margin-top: 20px;">
+                            <button id="resetFilters" class="btn btn-secondary" style="flex: 1;">
+                                <i class="fas fa-redo"></i> Reset
+                            </button>
+                            <button id="applyFilters" class="btn btn-success" style="flex: 1;">
+                                <i class="fas fa-filter"></i> Apply
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Service Limits -->
+                <div class="glass-card service-limits">
+                    <div style="padding: 25px;">
+                        <h2><i class="fas fa-tachometer-alt"></i> Service Limits</h2>
+                        <div id="serviceLimitsContainer">
+                            <div style="text-align: center; padding: 30px; color: #a0a0c0;">
+                                <i class="fas fa-spinner fa-spin"></i><br>
+                                Loading Service Limits...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Summary Cards -->
+                <div class="glass-card">
+                    <div class="summary-grid">
+                        <div class="summary-card">
+                            <h3><i class="fas fa-money-bill-wave"></i> Total Revenue</h3>
+                            <p id="totalRevenue">ZMW 0</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3><i class="fas fa-exchange-alt"></i> Total Transactions</h3>
+                            <p id="totalTransactions">0</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3><i class="fas fa-cogs"></i> Unique Services</h3>
+                            <p id="uniqueServices">0</p>
+                        </div>
+                        <div class="summary-card">
+                            <h3><i class="fas fa-mobile-alt"></i> Unique Booths</h3>
+                            <p id="uniqueBooths">0</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Grid -->
+                <div class="charts-grid">
+                    <div class="glass-card chart-container">
+                        <h2><i class="fas fa-chart-bar"></i> Revenue by Booth</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="boothChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card chart-container">
+                        <h2><i class="fas fa-chart-pie"></i> Top Services</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="serviceChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card chart-container">
+                        <h2><i class="fas fa-chart-bar"></i> Revenue by Service</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="revenueServiceChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="glass-card chart-container">
+                        <h2><i class="fas fa-trophy"></i> Top Performing Booths</h2>
+                        <div class="chart-wrapper">
+                            <canvas id="topBoothsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+
+    <!-- Notifications Container -->
+    <div id="notificationsContainer" style="position:fixed;top:80px;right:30px;z-index:2000;"></div>
+    <span id="notificationCount" style="display:none;"></span>
+
+    <!-- Login Modal -->
+    <div id="loginModal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.5);z-index:3000;align-items:center;justify-content:center;">
+        <div style="background:#222;padding:30px;border-radius:16px;min-width:300px;max-width:90vw;">
+            <h2 style="color:#fff;margin-bottom:20px;">Login</h2>
+            <input id="loginUsername" type="text" placeholder="Username" style="width:100%;margin-bottom:10px;padding:10px;border-radius:8px;">
+            <input id="loginPassword" type="password" placeholder="Password" style="width:100%;margin-bottom:20px;padding:10px;border-radius:8px;">
+            <button id="submitLogin" class="btn btn-success" style="width:100%;margin-bottom:10px;">Login</button>
+            <button id="closeLogin" class="btn btn-secondary" style="width:100%;">Cancel</button>
+        </div>
+    </div>
+</body>
+</html>
